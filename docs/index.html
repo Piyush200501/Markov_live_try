@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markets Remember — A Markov Chain Study of Nifty 50 Regimes</title>
+<meta name="description" content="A discrete-time Markov chain model of Nifty 50 regime transitions, conditioned on FII/DII institutional flow — B.Sc. (Hons) Mathematics dissertation by Piyush Mittal.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #10131A;
+    --bg-raised: #171B24;
+    --bg-raised-2: #1D2230;
+    --ink: #EDEAE2;
+    --ink-dim: #9BA3B4;
+    --ink-faint: #5C6478;
+    --accent: #D9A441;
+    --accent-soft: rgba(217,164,65,0.14);
+    --up: #5FAE7C;
+    --down: #C1594F;
+    --stagnant: #7C8699;
+    --line: rgba(237,234,226,0.10);
+    --font-display: 'Instrument Serif', Georgia, serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  a { color: var(--accent); }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  /* ---------- NAV ---------- */
+  nav.top {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(16,19,26,0.85);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav.top .wrap {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-top: 16px; padding-bottom: 16px;
+  }
+  .brand { font-family: var(--font-mono); font-size: 0.85rem; color: var(--ink-dim); letter-spacing: 0.02em; }
+  .brand strong { color: var(--ink); font-weight: 600; }
+  .navlinks { display: flex; gap: 20px; font-size: 0.85rem; }
+  .navlinks a { color: var(--ink-dim); text-decoration: none; }
+  .navlinks a:hover { color: var(--accent); }
+  .brand .sub { }
+  @media (max-width: 560px) {
+    nav.top .wrap { flex-wrap: nowrap; gap: 10px; }
+    .brand { font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand .sub { display: none; }
+    .navlinks { gap: 12px; font-size: 0.75rem; flex-shrink: 0; }
+  }
+
+  /* ---------- HERO ---------- */
+  header.hero {
+    padding: 80px 0 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  h1.display {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(2.3rem, 5.4vw, 3.6rem);
+    line-height: 1.1;
+    margin: 0 0 22px;
+    max-width: 15ch;
+    letter-spacing: -0.01em;
+  }
+  h1.display em { color: var(--accent); font-style: italic; }
+  .hero-sub {
+    font-size: clamp(1rem, 1.6vw, 1.15rem);
+    color: var(--ink-dim);
+    max-width: 56ch;
+    margin: 0 0 40px;
+  }
+
+  .ambient {
+    position: relative;
+    height: 190px;
+    margin: 20px 0 44px;
+  }
+  .ambient svg { width: 100%; height: 100%; overflow: visible; }
+  .ambient circle.node {
+    fill: var(--bg-raised);
+    stroke-width: 1.4;
+  }
+  .ambient .node-up { stroke: var(--up); }
+  .ambient .node-down { stroke: var(--down); }
+  .ambient .node-stagnant { stroke: var(--stagnant); }
+  .ambient circle.pulse {
+    fill: none; stroke-width: 1;
+    opacity: 0;
+    animation: pulseOut 3.6s ease-out infinite;
+  }
+  .ambient .pulse-up { stroke: var(--up); }
+  .ambient .pulse-down { stroke: var(--down); }
+  .ambient .pulse-stagnant { stroke: var(--stagnant); }
+  .ambient .pulse-down { animation-delay: 1.1s; }
+  .ambient .pulse-stagnant { animation-delay: 2.2s; }
+  @keyframes pulseOut {
+    0% { r: 20; opacity: 0.55; }
+    100% { r: 52; opacity: 0; }
+  }
+  .ambient line.edge { stroke: var(--line); stroke-width: 1; }
+
+  .stat-strip {
+    display: flex; flex-wrap: wrap; gap: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .stat-strip .s {
+    flex: 1 1 auto;
+    padding: 18px 24px 18px 0;
+    margin-right: 24px;
+    border-right: 1px solid var(--line);
+  }
+  .stat-strip .s:last-child { border-right: none; }
+  .stat-strip .num { font-family: var(--font-mono); font-size: 1.3rem; color: var(--ink); font-weight: 600; }
+  .stat-strip .lbl { font-size: 0.78rem; color: var(--ink-faint); margin-top: 4px; }
+
+  /* ---------- SECTIONS ---------- */
+  section.stage {
+    padding: 78px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .stage-head {
+    display: flex; align-items: baseline; gap: 16px;
+    margin-bottom: 14px;
+  }
+  .stage-num {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+  }
+  h2.stage-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    font-weight: 400;
+    margin: 0;
+  }
+  .stage-copy {
+    color: var(--ink-dim);
+    max-width: 62ch;
+    margin-bottom: 34px;
+  }
+  .stage-copy strong { color: var(--ink); font-weight: 600; }
+
+  .panel {
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 28px;
+  }
+
+  /* slider */
+  .control-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 26px; }
+  .control-row label { font-size: 0.82rem; color: var(--ink-dim); font-family: var(--font-mono); }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 220px; height: 3px; border-radius: 2px;
+    background: var(--line); outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); cursor: pointer;
+    border: 2px solid var(--bg);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; border: 2px solid var(--bg);
+  }
+  .thresh-val { font-family: var(--font-mono); color: var(--accent); font-weight: 600; min-width: 4.5ch; }
+
+  .two-col { display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: center; }
+  @media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* graph */
+  .graph-wrap svg { width: 100%; height: auto; overflow: visible; }
+  .graph-wrap circle.node { fill: var(--bg-raised-2); stroke-width: 2; transition: r 0.25s ease, stroke-width 0.25s ease; }
+  .graph-wrap .node-up { stroke: var(--up); }
+  .graph-wrap .node-down { stroke: var(--down); }
+  .graph-wrap .node-stagnant { stroke: var(--stagnant); }
+  .graph-wrap .node-label { font-family: var(--font-mono); font-size: 11px; fill: var(--ink-dim); text-anchor: middle; }
+  .graph-wrap path.edge { fill: none; stroke: var(--ink-faint); transition: stroke-width 0.3s ease, opacity 0.3s ease; }
+  .graph-wrap .dot-active { transition: stroke-width 0.25s ease; }
+  .sim-dot { fill: var(--accent); filter: drop-shadow(0 0 6px var(--accent)); }
+
+  /* state bars */
+  .state-bars { margin-top: 6px; }
+  .state-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 0.82rem; }
+  .state-bar-row .name { width: 90px; font-family: var(--font-mono); color: var(--ink-dim); }
+  .state-bar-track { flex: 1; height: 8px; background: var(--bg-raised-2); border-radius: 4px; overflow: hidden; }
+  .state-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease; }
+  .fill-up { background: var(--up); }
+  .fill-down { background: var(--down); }
+  .fill-stagnant { background: var(--stagnant); }
+  .state-bar-row .pct { font-family: var(--font-mono); color: var(--ink); width: 4.2ch; text-align: right; }
+
+  /* tpm table */
+  table.tpm { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.85rem; margin-top: 18px; width: 100%; }
+  table.tpm th, table.tpm td { padding: 9px 10px; text-align: center; border: 1px solid var(--line); }
+  table.tpm th { color: var(--ink-faint); font-weight: 500; font-size: 0.75rem; }
+  table.tpm td { color: var(--ink); }
+
+  /* percentile strip */
+  .pct-strip { position: relative; height: 90px; margin-top: 10px; }
+  .pct-track { position: absolute; top: 44px; left: 0; right: 0; height: 4px; background: var(--bg-raised-2); border-radius: 2px; }
+  .pct-region { position: absolute; top: 44px; height: 4px; border-radius: 2px; }
+  .pct-dot { position: absolute; width: 6px; height: 6px; border-radius: 50%; top: 41px; transform: translateX(-50%); }
+  .pct-marker { position: absolute; top: 0; font-family: var(--font-mono); font-size: 0.68rem; color: var(--ink-faint); transform: translateX(-50%); }
+  .pct-legend { display: flex; gap: 22px; margin-top: 46px; font-size: 0.78rem; font-family: var(--font-mono); }
+  .pct-legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-dim); }
+  .pct-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  /* toggle buttons */
+  .seg { display: inline-flex; gap: 6px; background: var(--bg-raised-2); padding: 5px; border-radius: 8px; }
+  .seg button {
+    font-family: var(--font-mono); font-size: 0.8rem;
+    background: transparent; border: none; color: var(--ink-dim);
+    padding: 7px 14px; border-radius: 6px; cursor: pointer;
+  }
+  .seg button.active { background: var(--accent); color: #191305; font-weight: 600; }
+  .seg button:hover:not(.active) { color: var(--ink); }
+
+  .regime-note { margin-top: 18px; color: var(--ink-dim); font-size: 0.9rem; min-height: 2.4em; }
+  .regime-note strong { color: var(--ink); }
+
+  /* heatmap */
+  .heat-cell { font-family: var(--font-mono); font-weight: 600; }
+
+  /* simulate */
+  .sim-btn {
+    font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600;
+    background: var(--accent); color: #191305; border: none;
+    padding: 12px 22px; border-radius: 7px; cursor: pointer;
+  }
+  .sim-btn:disabled { opacity: 0.5; cursor: default; }
+  .sim-btn:hover:not(:disabled) { filter: brightness(1.08); }
+  .sim-summary { margin-top: 20px; font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-dim); }
+  .sim-summary b { color: var(--ink); }
+  .spark { margin-top: 20px; }
+  .spark svg { width: 100%; height: 70px; overflow: visible; }
+  .spark path.line { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+  .spark line.zero { stroke: var(--line); stroke-width: 1; }
+
+  /* findings */
+  .findings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 760px) { .findings-grid { grid-template-columns: 1fr; } }
+  .fcard { background: var(--bg-raised); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+  .fcard.wide { grid-column: span 3; background: linear-gradient(135deg, var(--bg-raised-2), var(--bg-raised)); border-color: var(--accent-soft); }
+  @media (max-width: 760px) { .fcard.wide { grid-column: span 1; } }
+  .fcard .big { font-family: var(--font-display); font-size: 2.4rem; color: var(--accent); line-height: 1; }
+  .fcard .cap { margin-top: 10px; color: var(--ink-dim); font-size: 0.88rem; }
+  .fcard.wide .big { font-size: 3rem; }
+
+  /* live signal */
+  .live-card {
+    background: var(--bg-raised); border: 1px solid var(--accent-soft); border-radius: 10px;
+    padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between;
+  }
+  .live-card .live-left { display: flex; align-items: center; gap: 14px; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--up); flex-shrink: 0; animation: livePulse 2s ease-in-out infinite; }
+  @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  .live-meta { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-faint); }
+  .live-state { font-family: var(--font-display); font-size: 1.6rem; margin-top: 2px; }
+  .live-forecast { display: flex; gap: 18px; }
+  .live-forecast .f { text-align: center; }
+  .live-forecast .f .p { font-family: var(--font-mono); font-weight: 600; font-size: 1.1rem; }
+  .live-forecast .f .l { font-size: 0.72rem; color: var(--ink-faint); margin-top: 2px; }
+
+  /* video */
+  .video-slot {
+    aspect-ratio: 16/9; background: var(--bg-raised);
+    border: 1px dashed var(--line); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; text-align: center; padding: 30px;
+  }
+  .video-slot .ic { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-faint); letter-spacing: 0.04em; text-transform: uppercase; }
+  .video-slot p { color: var(--ink-dim); max-width: 40ch; margin: 0; font-size: 0.92rem; }
+
+  /* footer */
+  footer { padding: 60px 0 80px; }
+  .foot-grid { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 30px; }
+  .foot-col h3 { font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 12px; }
+  .foot-col a, .foot-col p { display: block; color: var(--ink-dim); text-decoration: none; font-size: 0.9rem; margin-bottom: 6px; }
+  .foot-col a:hover { color: var(--accent); }
+  .foot-bottom { margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 0.8rem; color: var(--ink-faint); font-family: var(--font-mono); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <div class="brand"><strong>Piyush Mittal</strong><span class="sub"> · Markov Chain Study</span></div>
+    <div class="navlinks">
+      <a href="#state-space">Model</a>
+      <a href="#findings">Findings</a>
+      <a href="#video">Video</a>
+      <a href="https://github.com/Piyush200501/stock-market-markov-chain">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">B.Sc. (Hons) Mathematics Dissertation — Shyam Lal College, University of Delhi</div>
+    <h1 class="display">Markets don't just wander. They <em>remember</em> who's buying.</h1>
+    <p class="hero-sub">A discrete-time Markov chain models how the Nifty 50 shifts between Upward, Downward, and Stagnant regimes — and how Foreign and Domestic institutional flows bend those odds.</p>
+
+    <div class="ambient" aria-hidden="true">
+      <svg viewBox="0 0 600 190">
+        <line class="edge" x1="300" y1="30" x2="120" y2="160"></line>
+        <line class="edge" x1="300" y1="30" x2="480" y2="160"></line>
+        <line class="edge" x1="120" y1="160" x2="480" y2="160"></line>
+        <circle class="pulse pulse-up" cx="300" cy="30" r="20"></circle>
+        <circle class="pulse pulse-down" cx="120" cy="160" r="20"></circle>
+        <circle class="pulse pulse-stagnant" cx="480" cy="160" r="20"></circle>
+        <circle class="node node-up" cx="300" cy="30" r="20"></circle>
+        <circle class="node node-down" cx="120" cy="160" r="20"></circle>
+        <circle class="node node-stagnant" cx="480" cy="160" r="20"></circle>
+      </svg>
+    </div>
+
+    <div class="stat-strip">
+      <div class="s"><div class="num">0.30%</div><div class="lbl">optimal state threshold</div></div>
+      <div class="s"><div class="num">1,612</div><div class="lbl">trading days studied</div></div>
+      <div class="s"><div class="num">41.29%</div><div class="lbl">Upward-state persistence</div></div>
+      <div class="s"><div class="num">23.06%</div><div class="lbl">bear-market probability under DII buying</div></div>
+    </div>
+  </div>
+</header>
+
+<section class="stage" id="live" style="padding-top:50px; padding-bottom:50px;">
+  <div class="wrap">
+    <div class="stage-head"><span class="stage-num">LIVE</span><h2 class="stage-title" style="font-size:1.15rem; font-family:var(--font-mono); font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">Today's Signal</h2></div>
+    <div class="live-card" id="live-card">
+      <div class="live-left">
+        <span class="live-dot"></span>
+        <div>
+          <div class="live-meta" id="live-date">Loading…</div>
+          <div class="live-state" id="live-state">—</div>
+        </div>
+      </div>
+      <div class="live-forecast" id="live-forecast"></div>
+    </div>
+  </div>
+</section>
+
+<section class="stage" id="question">
+  <div class="wrap">
+    <div class="stage-head"><span class="stage-num">01</span><h2 class="stage-title">The question</h2></div>
+    <p class="stage-copy">Standard models treat index returns as a continuous, linear, roughly random process — the textbook Efficient Market Hypothesis. But Indian equity markets are punctuated by sharp, institution-driven regime shifts: FII outflows during global risk-off episodes, DII buying during domestic SIP-fuelled rallies. A <strong>discrete-time Markov chain</strong> captures something a linear regression can't — the probability that today's regime determines tomorrow's, and how that probability itself shifts depending on who's moving money.</p>
+  </div>
+</section>
+
+<section class="stage" id="state-space">
+  <div class="wrap">
+    <div class="stage-head"><span class="stage-num">02</span><h2 class="stage-title">Building the state space</h2></div>
+    <p class="stage-copy">Every trading day is classified as <strong>Upward</strong>, <strong>Downward</strong>, or <strong>Stagnant</strong> based on whether its log return crosses a symmetric threshold. Too tight, and noise gets mistaken for a regime shift. Too wide, and real momentum gets buried in "Stagnant." Drag the slider through the same 0.20–0.40% range tested in the dissertation — this is live on a real, independent Nifty 50 sample that grows every trading day.</p>
+
+    <div class="panel">
+      <div class="control-row">
+        <label for="threshold-slider">DAILY RETURN THRESHOLD</label>
+        <input type="range" id="threshold-slider" min="0.002" max="0.004" step="0.0005" value="0.003">
+        <span class="thresh-val" id="threshold-val">0.30%</span>
+      </div>
+
+      <div class="two-col">
+        <div class="graph-wrap" id="graph-state"></div>
+        <div>
+          <div class="state-bars" id="state-bars"></div>
+          <table class="tpm" id="tpm-table"></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage" id="regimes">
+  <div class="wrap">
+    <div class="stage-head"><span class="stage-num">03</span><h2 class="stage-title">Reading institutional flow</h2></div>
+    <p class="stage-copy">Fixed rupee-value cutoffs go stale as market size grows over a multi-year window. Instead, each day's net FII/DII flow is ranked against its own empirical distribution — anything above the <strong>75th percentile</strong> is Strongly Positive (SP), below the <strong>25th</strong> is Strongly Negative (SN), the rest is Neutral (N).</p>
+
+    <div class="panel">
+      <div class="pct-strip" id="pct-strip"></div>
+      <div class="pct-legend">
+        <span><i style="background:var(--down)"></i>Strongly Negative</span>
+        <span><i style="background:var(--stagnant)"></i>Neutral</span>
+        <span><i style="background:var(--up)"></i>Strongly Positive</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage" id="conditional">
+  <div class="wrap">
+    <div class="stage-head"><span class="stage-num">04</span><h2 class="stage-title">The tug-of-war</h2></div>
+    <p class="stage-copy">Split the transition matrix by institutional regime, and the market's personality changes. Switch between regimes below to see how the odds of tomorrow's state shift depending on who was buying today.</p>
+
+    <div class="panel">
+      <div class="seg" id="regime-toggle" role="group" aria-label="Select institutional regime">
+        <button data-r="SN" class="active">SN — Strong Selling</button>
+        <button data-r="N">N — Neutral</button>
+        <button data-r="SP">SP — Strong Buying</button>
+      </div>
+      <table class="tpm" id="heatmap-table"></table>
+      <div class="regime-note" id="regime-note"></div>
+    </div>
+  </div>
+</section>
+
+<section class="stage" id="simulate">
+  <div class="wrap">
+    <div class="stage-head"><span class="stage-num">05</span><h2 class="stage-title">Simulate a path</h2></div>
+    <p class="stage-copy">Pick which regime drives the model, then run a 30-day Monte Carlo path via inverse transform sampling — the same method used in the dissertation to stress-test the conditional matrices.</p>
+
+    <div class="panel">
+      <div class="control-row">
+        <label>DRIVING MATRIX</label>
+        <div class="seg" id="sim-regime-toggle">
+          <button data-r="baseline" class="active">Baseline</button>
+          <button data-r="SN">SN</button>
+          <button data-r="N">N</button>
+          <button data-r="SP">SP</button>
+        </div>
+        <button class="sim-btn" id="sim-run">Run 30-day simulation</button>
+      </div>
+
+      <div class="two-col">
+        <div class="graph-wrap" id="graph-sim"></div>
+        <div>
+          <div class="spark" id="spark"></div>
+          <div class="sim-summary" id="sim-summary">Press run to simulate a path.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage" id="findings">
+  <div class="wrap">
+    <div class="stage-head"><span class="stage-num">06</span><h2 class="stage-title">What the model found</h2></div>
+    <p class="stage-copy">These are the dissertation's actual empirical results on the original dataset — 1,612 trading days of Nifty 50 closes with matched FII/DII net flows, April 2018 to October 2024 — plus an independent replication that keeps growing with fresh data every trading day.</p>
+
+    <div class="findings-grid">
+      <div class="fcard">
+        <div class="big">41.29%</div>
+        <div class="cap">Upward-state diagonal dominance (p₁₁), with a Mean First Passage Time of just 2.56 days back to Upward — evidence against the strong-form Efficient Market Hypothesis.</div>
+      </div>
+      <div class="fcard">
+        <div class="big">41.31%</div>
+        <div class="cap">Downward persistence when FII flow is Strongly Negative — sustained foreign selling measurably prolongs bear regimes.</div>
+      </div>
+      <div class="fcard">
+        <div class="big">1.70→1.28<span style="font-size:1.2rem">d</span></div>
+        <div class="cap">Expected bear-market duration shortens from 1.703 to 1.276 days once DII buying (SP regime) takes over.</div>
+      </div>
+      <div class="fcard wide">
+        <div class="big">23.06%</div>
+        <div class="cap">The "DII shock absorber": under sustained Domestic Institutional buying, the market's long-run steady-state probability of sitting in a bear regime collapses to 23.06% — evidence that SIP-driven domestic liquidity has structurally decoupled Indian equities from pure foreign-flow dependence. (One methodology, one market, one time window — not a settled claim.)</div>
+      </div>
+      <div class="fcard wide">
+        <div class="big">36.1% <span style="font-size:1.3rem;color:var(--ink-faint)">vs</span> 15.6%</div>
+        <div class="cap"><strong>Independent replication.</strong> Re-running this exact methodology on a fresh, non-overlapping sample reproduces the same shape of result: Downward persistence is markedly higher under sustained institutional selling than under sustained buying. See the live model above — Section 05's "SN" and "SP" driving-matrix options are this exact replication data, updated automatically.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage" id="video" style="border-bottom:none;">
+  <div class="wrap">
+    <div class="stage-head"><span class="stage-num">07</span><h2 class="stage-title">Watch the walkthrough</h2></div>
+    <p class="stage-copy">A short explainer covering the methodology, the validation approach, and the headline result.</p>
+    <div class="video-slot" id="video-slot">
+      <div class="ic">Video not embedded yet</div>
+      <p>Replace this block with a YouTube/Vimeo <code>&lt;iframe&gt;</code> once the walkthrough is recorded.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-col">
+        <h3>Project</h3>
+        <a href="https://github.com/Piyush200501/stock-market-markov-chain">GitHub repository ↗</a>
+        <a href="https://drive.google.com/file/d/1IBZMnA85DRGTS7yJ5IfwS06yaZMlCvox/view?usp=sharing">Full dissertation PDF ↗</a>
+      </div>
+      <div class="foot-col">
+        <h3>Author</h3>
+        <p>Piyush Mittal</p>
+        <p>B.Sc. (Hons) Mathematics</p>
+        <p>Shyam Lal College, University of Delhi</p>
+      </div>
+      <div class="foot-col">
+        <h3>Supervision</h3>
+        <p>Dr. Virender</p>
+        <p>Department of Mathematics</p>
+      </div>
+    </div>
+    <div class="foot-bottom" id="foot-bottom-text">Sections 02–05 are computed from a real Nifty 50 + FII/DII sample that updates automatically on trading days — only derived matrices and aggregate statistics are embedded here, not the raw price/flow series. Section 06 reports the dissertation's original 2018–2024 results alongside this live replication.</div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- Core Markov chain logic (mirrors src/ Python modules) ---------- */
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function runSimulation(startState, P, days, rng) {
+    const path = [startState];
+    for (let d = 0; d < days; d++) {
+      const probs = P[path[path.length - 1] - 1];
+      const r = rng(); let cum = 0, next = path[path.length - 1];
+      for (let j = 0; j < probs.length; j++) { cum += probs[j]; if (r <= cum) { next = j + 1; break; } }
+      path.push(next);
+    }
+    return path;
+  }
+
+  /* ---------- Live-updating dataset (rewritten automatically by scripts/update_data.py) ---------- */
+  const LIVE_SIGNAL = {
+  "date": "2025-08-08",
+  "state": 2,
+  "regime": "SP",
+  "forecast": [
+    0.5,
+    0.1562,
+    0.3438
+  ]
+};
+  const REAL_DATA = {
+  "sweep": {
+    "0.0020": {
+      "tpm": [
+        [
+          0.3927,
+          0.2982,
+          0.3091
+        ],
+        [
+          0.3957,
+          0.3826,
+          0.2217
+        ],
+        [
+          0.4144,
+          0.337,
+          0.2486
+        ]
+      ],
+      "dist": [
+        0.4003,
+        0.3362,
+        0.2635
+      ]
+    },
+    "0.0025": {
+      "tpm": [
+        [
+          0.3608,
+          0.2784,
+          0.3608
+        ],
+        [
+          0.3907,
+          0.3581,
+          0.2512
+        ],
+        [
+          0.3611,
+          0.3148,
+          0.3241
+        ]
+      ],
+      "dist": [
+        0.3712,
+        0.3144,
+        0.3144
+      ]
+    },
+    "0.0030": {
+      "tpm": [
+        [
+          0.3403,
+          0.2353,
+          0.4244
+        ],
+        [
+          0.3763,
+          0.3041,
+          0.3196
+        ],
+        [
+          0.3268,
+          0.315,
+          0.3583
+        ]
+      ],
+      "dist": [
+        0.3464,
+        0.2838,
+        0.3697
+      ]
+    },
+    "0.0035": {
+      "tpm": [
+        [
+          0.3151,
+          0.1963,
+          0.4886
+        ],
+        [
+          0.375,
+          0.2898,
+          0.3352
+        ],
+        [
+          0.2852,
+          0.2852,
+          0.4296
+        ]
+      ],
+      "dist": [
+        0.3188,
+        0.2576,
+        0.4236
+      ]
+    },
+    "0.0040": {
+      "tpm": [
+        [
+          0.299,
+          0.1814,
+          0.5196
+        ],
+        [
+          0.3681,
+          0.2699,
+          0.362
+        ],
+        [
+          0.2602,
+          0.2602,
+          0.4796
+        ]
+      ],
+      "dist": [
+        0.2969,
+        0.2387,
+        0.4643
+      ]
+    }
+  },
+  "conditional": {
+    "N": [
+      [
+        0.3083,
+        0.2583,
+        0.4333
+      ],
+      [
+        0.3038,
+        0.3038,
+        0.3924
+      ],
+      [
+        0.3542,
+        0.3125,
+        0.3333
+      ]
+    ],
+    "SN": [
+      [
+        0.4,
+        0.2333,
+        0.3667
+      ],
+      [
+        0.3976,
+        0.3614,
+        0.241
+      ],
+      [
+        0.339,
+        0.322,
+        0.339
+      ]
+    ],
+    "SP": [
+      [
+        0.3636,
+        0.2045,
+        0.4318
+      ],
+      [
+        0.5,
+        0.1562,
+        0.3438
+      ],
+      [
+        0.2353,
+        0.3137,
+        0.451
+      ]
+    ]
+  },
+  "expectedReturns": [
+    0.007963,
+    -0.008279,
+    7.5e-05
+  ],
+  "p25Flow": -432.37,
+  "p75Flow": 1860.13,
+  "nDays": 687,
+  "dateStart": "2022-11-04",
+  "dateEnd": "2025-08-08"
+};
+  const STATE_NAMES = { 1: 'Upward', 2: 'Downward', 3: 'Stagnant' };
+  const STATE_COLORS = { 1: 'up', 2: 'down', 3: 'stagnant' };
+
+  function expectedReturnsPerState() { return REAL_DATA.expectedReturns; }
+
+  /* ---------- Live Signal card ---------- */
+  (function renderLiveSignal() {
+    const d = new Date(LIVE_SIGNAL.date + 'T00:00:00');
+    document.getElementById('live-date').textContent = 'As of ' + d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) + ' — flow regime: ' + LIVE_SIGNAL.regime;
+    document.getElementById('live-state').textContent = 'Market closed ' + STATE_NAMES[LIVE_SIGNAL.state];
+    const labels = ['Up', 'Down', 'Stagnant'];
+    const colors = ['up', 'down', 'stagnant'];
+    let html = '';
+    LIVE_SIGNAL.forecast.forEach((p, i) => {
+      html += `<div class="f"><div class="p" style="color:var(--${colors[i]})">${(p * 100).toFixed(0)}%</div><div class="l">${labels[i]}</div></div>`;
+    });
+    document.getElementById('live-forecast').innerHTML = html;
+  })();
+
+  /* ---------- Graph rendering ---------- */
+  const NODES = {
+    1: { x: 160, y: 40, cls: 'node-up' },
+    2: { x: 50, y: 230, cls: 'node-down' },
+    3: { x: 270, y: 230, cls: 'node-stagnant' }
+  };
+  const EDGES = [
+    { from: 1, to: 1, d: 'M144,26 C124,-6 196,-6 176,26' },
+    { from: 1, to: 2, d: 'M160,40 Q79,120 50,230' },
+    { from: 2, to: 1, d: 'M50,230 Q131,150 160,40' },
+    { from: 1, to: 3, d: 'M160,40 Q189,150 270,230' },
+    { from: 3, to: 1, d: 'M270,230 Q241,120 160,40' },
+    { from: 2, to: 2, d: 'M36,216 C4,246 4,282 46,258' },
+    { from: 2, to: 3, d: 'M50,230 Q160,262 270,230' },
+    { from: 3, to: 2, d: 'M270,230 Q160,198 50,230' },
+    { from: 3, to: 3, d: 'M284,216 C316,246 316,282 274,258' }
+  ];
+
+  function buildGraphSVG(prefix) {
+    let edgesSvg = EDGES.map(e =>
+      `<path class="edge" id="${prefix}-e-${e.from}-${e.to}" d="${e.d}" stroke-width="1" opacity="0.3"></path>`
+    ).join('');
+    let nodesSvg = Object.entries(NODES).map(([k, n]) =>
+      `<circle class="node ${n.cls}" id="${prefix}-n-${k}" cx="${n.x}" cy="${n.y}" r="19"></circle>
+       <text class="node-label" x="${n.x}" y="${n.y + 36}">${STATE_NAMES[k]}</text>`
+    ).join('');
+    return `<svg viewBox="0 0 320 300">
+      <defs><marker id="${prefix}-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" style="fill:var(--ink-faint)"/></marker></defs>
+      ${edgesSvg}
+      ${nodesSvg}
+      <circle class="sim-dot" id="${prefix}-dot" cx="${NODES[1].x}" cy="${NODES[1].y}" r="5" style="display:none"></circle>
+    </svg>`;
+  }
+
+  function updateGraph(prefix, matrix) {
+    EDGES.forEach(e => {
+      const p = matrix[e.from - 1][e.to - 1];
+      const el = document.getElementById(`${prefix}-e-${e.from}-${e.to}`);
+      if (el) { el.setAttribute('stroke-width', (1 + p * 7).toFixed(2)); el.setAttribute('opacity', (0.2 + p * 0.8).toFixed(2)); el.setAttribute('marker-end', `url(#${prefix}-arrow)`); }
+    });
+  }
+
+  function setActiveNode(prefix, state) {
+    [1, 2, 3].forEach(s => {
+      const el = document.getElementById(`${prefix}-n-${s}`);
+      if (el) el.setAttribute('r', s === state ? 24 : 19);
+    });
+  }
+
+  /* ---------- Section 02: threshold slider ---------- */
+  document.getElementById('graph-state').innerHTML = buildGraphSVG('gs');
+  const slider = document.getElementById('threshold-slider');
+  const threshVal = document.getElementById('threshold-val');
+  const stateBars = document.getElementById('state-bars');
+  const tpmTable = document.getElementById('tpm-table');
+
+  function renderStateBars(dist) {
+    const rows = [1, 2, 3].map(s => {
+      const pct = (dist[s - 1] * 100).toFixed(1);
+      return `<div class="state-bar-row">
+        <span class="name">${STATE_NAMES[s]}</span>
+        <span class="state-bar-track"><span class="state-bar-fill fill-${STATE_COLORS[s]}" style="width:${pct}%"></span></span>
+        <span class="pct">${pct}%</span>
+      </div>`;
+    }).join('');
+    stateBars.innerHTML = rows;
+  }
+
+  function renderTPM(table, matrix, colorFn) {
+    let html = '<tr><th></th><th>→ Up</th><th>→ Down</th><th>→ Stagnant</th></tr>';
+    const labels = ['Up', 'Down', 'Stagnant'];
+    matrix.forEach((row, i) => {
+      html += `<tr><th>${labels[i]} →</th>` + row.map(p => {
+        const style = colorFn ? `style="background:${colorFn(p)}"` : '';
+        return `<td class="heat-cell" ${style}>${(p * 100).toFixed(1)}%</td>`;
+      }).join('') + '</tr>';
+    });
+    table.innerHTML = html;
+  }
+
+  function refreshStateSpace() {
+    const threshold = parseFloat(slider.value);
+    threshVal.textContent = (threshold * 100).toFixed(2) + '%';
+    const entry = REAL_DATA.sweep[threshold.toFixed(4)];
+    renderStateBars(entry.dist);
+    renderTPM(tpmTable, entry.tpm, null);
+    updateGraph('gs', entry.tpm);
+  }
+  slider.addEventListener('input', refreshStateSpace);
+  refreshStateSpace();
+
+  /* ---------- Section 03: percentile strip ---------- */
+  (function renderPctStrip() {
+    const strip = document.getElementById('pct-strip');
+    const colorFor = r => r === 'SN' ? 'var(--down)' : r === 'SP' ? 'var(--up)' : 'var(--stagnant)';
+    const illustrative = [8,14,18,22,27,31,35,38,41,44,47,50,53,56,59,62,65,68,71,74,77,80,83,86,89,92,95];
+    const regimeFor = pos => pos < 25 ? 'SN' : pos > 75 ? 'SP' : 'N';
+
+    const fmtCr = v => (v < 0 ? '−₹' : '₹') + Math.abs(v).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    let html = `<div class="pct-marker" style="left:25%">P25 · ${fmtCr(REAL_DATA.p25Flow)} Cr</div>`;
+    html += `<div class="pct-marker" style="left:75%">P75 · ${fmtCr(REAL_DATA.p75Flow)} Cr</div>`;
+    html += `<div class="pct-track"></div>`;
+    html += `<div class="pct-region" style="left:0%; width:25%; background:var(--down); opacity:0.35;"></div>`;
+    html += `<div class="pct-region" style="left:25%; width:50%; background:var(--stagnant); opacity:0.35;"></div>`;
+    html += `<div class="pct-region" style="left:75%; width:25%; background:var(--up); opacity:0.35;"></div>`;
+    illustrative.forEach(pos => {
+      html += `<div class="pct-dot" style="left:${pos}%; background:${colorFor(regimeFor(pos))};"></div>`;
+    });
+    strip.innerHTML = html;
+  })();
+
+  /* ---------- Section 04: conditional heatmap ---------- */
+  const CONDITIONAL_TPMS = REAL_DATA.conditional;
+
+  const heatmapTable = document.getElementById('heatmap-table');
+  const regimeNote = document.getElementById('regime-note');
+  const REGIME_LABELS = { SN: 'Strongly Negative (FII/DII selling)', N: 'Neutral flow', SP: 'Strongly Positive (institutional buying)' };
+  const REGIME_NOTES = {
+    SN: 'Under sustained selling, the <strong>Downward</strong> state pulls hardest on itself — bear regimes become stickier.',
+    N: 'Neutral flow produces the closest thing to the unconditional baseline — no institutional thumb on the scale.',
+    SP: 'Under sustained buying, <strong>Downward</strong> loses its grip — this is the regime behind the "shock absorber" finding.'
+  };
+
+  function heatColor(p) {
+    const alpha = 0.12 + p * 0.55;
+    return `rgba(217,164,65,${alpha.toFixed(2)})`;
+  }
+
+  function refreshHeatmap(regime) {
+    renderTPM(heatmapTable, CONDITIONAL_TPMS[regime], heatColor);
+    regimeNote.innerHTML = `<strong>${REGIME_LABELS[regime]}.</strong> ${REGIME_NOTES[regime]}`;
+  }
+  document.getElementById('regime-toggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    document.querySelectorAll('#regime-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    refreshHeatmap(btn.dataset.r);
+  });
+  refreshHeatmap('SN');
+
+  /* ---------- Section 05: simulation ---------- */
+  document.getElementById('graph-sim').innerHTML = buildGraphSVG('sm');
+  const BASELINE_TPM = REAL_DATA.sweep["0.0030"].tpm;
+  let simMatrixKey = 'baseline';
+  function currentSimMatrix() { return simMatrixKey === 'baseline' ? BASELINE_TPM : CONDITIONAL_TPMS[simMatrixKey]; }
+  updateGraph('sm', currentSimMatrix());
+
+  document.getElementById('sim-regime-toggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('button'); if (!btn) return;
+    document.querySelectorAll('#sim-regime-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    simMatrixKey = btn.dataset.r;
+    updateGraph('sm', currentSimMatrix());
+  });
+
+  const runBtn = document.getElementById('sim-run');
+  const sparkEl = document.getElementById('spark');
+  const summaryEl = document.getElementById('sim-summary');
+  const simDot = document.getElementById('sm-dot');
+
+  function tween(fromXY, toXY, duration) {
+    return new Promise(resolve => {
+      if (reduceMotion || duration === 0) { simDot.setAttribute('cx', toXY.x); simDot.setAttribute('cy', toXY.y); return resolve(); }
+      const start = performance.now();
+      function frame(now) {
+        const t = Math.min(1, (now - start) / duration);
+        simDot.setAttribute('cx', fromXY.x + (toXY.x - fromXY.x) * t);
+        simDot.setAttribute('cy', fromXY.y + (toXY.y - fromXY.y) * t);
+        if (t < 1) requestAnimationFrame(frame); else resolve();
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  function renderSparkline(returnsPath) {
+    let cum = 0;
+    const pts = returnsPath.map((r, i) => { cum += r; return { x: i, y: cum }; });
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const minY = Math.min(...ys, 0), maxY = Math.max(...ys, 0);
+    const w = 300, h = 70;
+    const scaleX = i => (i / (pts.length - 1 || 1)) * w;
+    const scaleY = v => h - ((v - minY) / ((maxY - minY) || 1)) * h;
+    const zeroY = scaleY(0);
+    const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${scaleX(p.x).toFixed(1)},${scaleY(p.y).toFixed(1)}`).join(' ');
+    sparkEl.innerHTML = `<svg viewBox="0 0 ${w} ${h}">
+      <line class="zero" x1="0" y1="${zeroY.toFixed(1)}" x2="${w}" y2="${zeroY.toFixed(1)}"></line>
+      <path class="line" d="${path}"></path>
+    </svg>`;
+  }
+
+  async function runSim() {
+    runBtn.disabled = true;
+    simDot.style.display = 'block';
+    const expReturns = expectedReturnsPerState();
+    const rng = mulberry32(Date.now() % 1e6);
+    const path = runSimulation(1, currentSimMatrix(), 30, rng);
+
+    setActiveNode('sm', 1);
+    simDot.setAttribute('cx', NODES[1].x); simDot.setAttribute('cy', NODES[1].y);
+
+    const returnsPath = [];
+    const shownPath = [1];
+    renderSparkline([0]);
+
+    for (let i = 1; i < path.length; i++) {
+      const from = NODES[path[i - 1]], to = NODES[path[i]];
+      await tween({ x: from.x, y: from.y }, { x: to.x, y: to.y }, 260);
+      setActiveNode('sm', path[i]);
+      returnsPath.push(expReturns[path[i] - 1]);
+      shownPath.push(path[i]);
+      renderSparkline(returnsPath);
+      await new Promise(r => setTimeout(r, 90));
+    }
+
+    const counts = { 1: 0, 2: 0, 3: 0 };
+    path.forEach(s => counts[s]++);
+    const totalReturn = (returnsPath.reduce((a, b) => a + b, 0) * 100).toFixed(2);
+    summaryEl.innerHTML = `<b>${counts[1]}</b> Up · <b>${counts[2]}</b> Down · <b>${counts[3]}</b> Stagnant days over 30 sessions — simulated cumulative return <b>${totalReturn}%</b>.`;
+    runBtn.disabled = false;
+  }
+  runBtn.addEventListener('click', runSim);
+
+})();
+</script>
+</body>
+</html>

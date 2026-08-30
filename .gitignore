@@ -1,0 +1,25 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Raw data — data/history.json IS intentionally committed (it's a small,
+# derived daily summary that scripts/update_data.py maintains automatically
+# — see the "Live, Self-Updating Data" section in README for the tradeoff).
+# Anything else CSV-shaped stays out of git by default.
+data/raw/
+*.csv
+!examples/**/*.csv
