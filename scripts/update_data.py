@@ -67,38 +67,65 @@ def fetch_new_price_rows(last_date_str):
 def fetch_fii_dii_today():
     """Fetch recent FII/DII net flow from NSE's unofficial API.
     Returns {date_str: {'fii': float, 'dii': float}}, or {} on any failure
-    (the pipeline degrades gracefully -- see merge_new_data)."""
+    (the pipeline degrades gracefully -- see merge_new_data).
+
+    Prints verbose diagnostics either way, since this endpoint is unofficial
+    and prone to silent failure (empty response instead of an error) -- the
+    prints are what let us debug it from GitHub Actions logs without being
+    able to hit nseindia.com directly ourselves."""
     import requests
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://www.nseindia.com/reports/fii-dii",
     }
     session = requests.Session()
     try:
-        session.get("https://www.nseindia.com", headers=headers, timeout=10)
-        resp = session.get("https://www.nseindia.com/api/fiidiiTradeReact", headers=headers, timeout=10)
+        r0 = session.get("https://www.nseindia.com", headers=headers, timeout=15)
+        print(f"DEBUG: homepage warm-up status = {r0.status_code}, cookies set = {list(session.cookies.keys())}")
+
+        r1 = session.get("https://www.nseindia.com/reports/fii-dii", headers=headers, timeout=15)
+        print(f"DEBUG: reports page status = {r1.status_code}")
+
+        resp = session.get("https://www.nseindia.com/api/fiidiiTradeReact", headers=headers, timeout=15)
+        print(f"DEBUG: API status = {resp.status_code}, content-type = {resp.headers.get('content-type')}, body length = {len(resp.text)}")
+        print(f"DEBUG: first 500 chars of response body:\n{resp.text[:500]}")
+
         resp.raise_for_status()
         data = resp.json()
+        print(f"DEBUG: parsed JSON has {len(data)} entries")
+        if data:
+            print(f"DEBUG: first entry looks like: {data[0]}")
     except Exception as e:
-        print(f"WARNING: FII/DII fetch failed ({e}). Skipping flow update this run.")
+        print(f"WARNING: FII/DII fetch failed with exception: {type(e).__name__}: {e}")
         return {}
 
     result = {}
+    skipped_shape = 0
     for entry in data:
         try:
             date_str = datetime.strptime(entry["date"], "%d-%b-%Y").strftime("%Y-%m-%d")
         except Exception:
+            skipped_shape += 1
             continue
         result.setdefault(date_str, {})
-        net = float(entry["buyValue"]) - float(entry["sellValue"])
+        try:
+            net = float(entry["buyValue"]) - float(entry["sellValue"])
+        except (KeyError, TypeError, ValueError) as e:
+            print(f"DEBUG: entry for {date_str} missing expected fields ({e}): {entry}")
+            continue
         category = entry.get("category", "")
         if "FII" in category or "FPI" in category:
             result[date_str]["fii"] = round(net, 2)
         elif "DII" in category:
             result[date_str]["dii"] = round(net, 2)
+
+    if skipped_shape:
+        print(f"DEBUG: skipped {skipped_shape} entries with an unrecognized date format")
+    print(f"DEBUG: final parsed result covers {len(result)} distinct date(s): {sorted(result.keys())}")
     return result
 
 
@@ -206,12 +233,12 @@ def recompute_and_write(history):
         html = f.read()
 
     new_real_data_js = "const REAL_DATA = " + json.dumps(real_data, indent=2) + ";"
-    html, n1 = re.subn(r"const REAL_DATA = \{.*?\n \};", new_real_data_js, html, count=1, flags=re.S)
+    html, n1 = re.subn(r"const REAL_DATA = \{.*?\};", new_real_data_js, html, count=1, flags=re.S)
     if n1 == 0:
         raise RuntimeError("Could not find REAL_DATA block in docs/index.html -- check the file wasn't hand-edited into a shape this regex can't match.")
 
     new_live_signal_js = "const LIVE_SIGNAL = " + json.dumps(live_signal, indent=2) + ";"
-    html, n2 = re.subn(r"const LIVE_SIGNAL = \{.*?\n \};", new_live_signal_js, html, count=1, flags=re.S)
+    html, n2 = re.subn(r"const LIVE_SIGNAL = \{.*?\};", new_live_signal_js, html, count=1, flags=re.S)
     if n2 == 0:
         raise RuntimeError("Could not find LIVE_SIGNAL block in docs/index.html.")
 
